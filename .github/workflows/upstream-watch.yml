@@ -4,14 +4,23 @@
 #
 # Runs daily at 06:17 UTC (off-peak minute to avoid GH Actions congestion).
 # Queries the npm registry for the latest @llamaindex/liteparse version.
-# If a newer version is found:
-#   1. Creates a branch with the version bump
-#   2. Opens a PR targeting main
-#   3. The CI workflow runs on the PR (build + test all flavours)
-#   4. If CI passes, the PR can be auto-merged (or manually reviewed)
-#   5. Merging to main triggers CI to publish tested images to GHCR
 #
-# This ensures only versions that pass the full test suite are published.
+# A PR is created ONLY when a new liteparse version is detected. Published
+# image tags are immutable and track the liteparse version — security patches
+# to api-server/ocr-server dependencies are NOT grounds for a new PR. Those
+# deps use semver ranges (npm ^, pip >=) and resolve to latest compatible
+# versions at Docker build time, so each new liteparse release inherently
+# picks up the newest patched dependencies.
+#
+# When a new version IS found, the PR includes a dependency security audit
+# (npm audit + pip-audit) so the maintainer has full visibility before merging.
+#
+# Flow:
+#   1. check-upstream: query npm for latest liteparse version
+#   2. audit-deps: run security audits on api-server + ocr-server deps
+#   3. create-update-pr: open PR with version bump + audit report
+#   4. CI runs on the PR (build + test all flavours)
+#   5. Merge → publish to GHCR (+ Docker Hub if enabled)
 # =============================================================================
 
 name: Upstream Watch
@@ -37,6 +46,9 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
+  # ---------------------------------------------------------------------------
+  # 1. Check for new LiteParse version on npm
+  # ---------------------------------------------------------------------------
   check-upstream:
     runs-on: ubuntu-latest
     outputs:
@@ -75,10 +87,68 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # Create a PR with the version bump
+  # 2. Audit api-server + ocr-server dependencies for known vulnerabilities
+  #    Only runs when a new liteparse version is detected (the trigger for a PR).
+  # ---------------------------------------------------------------------------
+  audit-deps:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.has_update == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      npm_audit: ${{ steps.npm.outputs.report }}
+      pip_audit: ${{ steps.pip.outputs.report }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Audit api-server npm dependencies
+        id: npm
+        run: |
+          cd api-server
+          npm install --omit=dev --ignore-scripts 2>/dev/null
+
+          echo "Running npm audit..."
+          AUDIT=$(npm audit --omit=dev --omit=peer 2>&1) || true
+          SUMMARY=$(echo "${AUDIT}" | tail -5)
+
+          # Check if there are vulnerabilities
+          VULNS=$(echo "${AUDIT}" | grep -cE 'moderate|high|critical' || true)
+
+          if [ "${VULNS}" -gt 0 ]; then
+            REPORT="**npm audit:** Found vulnerabilities\n\`\`\`\n${SUMMARY}\n\`\`\`"
+          else
+            REPORT="**npm audit:** No known vulnerabilities"
+          fi
+
+          # Escape for GH output (multiline)
+          echo "report<<AUDIT_EOF" >> "$GITHUB_OUTPUT"
+          echo -e "${REPORT}" >> "$GITHUB_OUTPUT"
+          echo "AUDIT_EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Audit ocr-server pip dependencies
+        id: pip
+        run: |
+          pip install pip-audit 2>/dev/null
+
+          echo "Running pip-audit..."
+          AUDIT=$(pip-audit -r ocr-server/requirements.txt 2>&1) || true
+
+          VULNS=$(echo "${AUDIT}" | grep -cE 'found [1-9]' || true)
+
+          if [ "${VULNS}" -gt 0 ]; then
+            REPORT="**pip-audit:** Found vulnerabilities\n\`\`\`\n${AUDIT}\n\`\`\`"
+          else
+            REPORT="**pip-audit:** No known vulnerabilities"
+          fi
+
+          echo "report<<AUDIT_EOF" >> "$GITHUB_OUTPUT"
+          echo -e "${REPORT}" >> "$GITHUB_OUTPUT"
+          echo "AUDIT_EOF" >> "$GITHUB_OUTPUT"
+
+  # ---------------------------------------------------------------------------
+  # 3. Create a PR with the version bump + audit report
   # ---------------------------------------------------------------------------
   create-update-pr:
-    needs: check-upstream
+    needs: [check-upstream, audit-deps]
     if: needs.check-upstream.outputs.has_update == 'true'
     runs-on: ubuntu-latest
     steps:
@@ -125,6 +195,8 @@ Previous version: ${{ needs.check-upstream.outputs.current_version }}"
         run: |
           NEW_VERSION="${{ needs.check-upstream.outputs.new_version }}"
           OLD_VERSION="${{ needs.check-upstream.outputs.current_version }}"
+          NPM_AUDIT="${{ needs.audit-deps.outputs.npm_audit }}"
+          PIP_AUDIT="${{ needs.audit-deps.outputs.pip_audit }}"
 
           gh pr create \
             --title "deps: bump liteparse to ${NEW_VERSION}" \
@@ -138,17 +210,28 @@ Previous version: ${{ needs.check-upstream.outputs.current_version }}"
           - **npm:** [@llamaindex/liteparse@${NEW_VERSION}](https://www.npmjs.com/package/@llamaindex/liteparse/v/${NEW_VERSION})
           - **Changelog:** Check the [LiteParse releases](https://github.com/run-llama/liteparse/releases)
 
+          ## Dependency security audit
+
+          Audited at PR creation time. Docker build resolves latest compatible
+          versions via semver ranges (\`^\` for npm, \`>=\` for pip), so the built
+          images will include any patches released between now and merge time.
+
+          ${NPM_AUDIT}
+
+          ${PIP_AUDIT}
+
           ## What happens next
 
           1. CI builds and tests all image flavours (base, ocr, full, api) with \`${NEW_VERSION}\`
           2. If all tests pass, this PR is safe to merge
-          3. Merging to main triggers the publish job → multi-arch images pushed to GHCR
+          3. Merging to main triggers the publish job — multi-arch images pushed to GHCR
 
           ## Test plan
 
           - [ ] CI passes for all four flavours
           - [ ] OCR sidecar smoke test passes
           - [ ] Review LiteParse changelog for breaking changes
+          - [ ] Review dependency audit above for unresolved vulnerabilities
 
           > This PR was created automatically by the [upstream-watch workflow](${{ github.server_url }}/${{ github.repository }}/actions/workflows/upstream-watch.yml).
           EOF
