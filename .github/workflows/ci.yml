@@ -50,7 +50,11 @@ env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository_owner }}/liteparse
-  # Resolved in the "resolve-version" job
+  # Optional Docker Hub publishing — set these repo vars/secrets to enable:
+  #   vars.DOCKERHUB_ENABLED   = "true"
+  #   vars.DOCKERHUB_IMAGE     = "youruser/liteparse" (defaults to IMAGE_NAME)
+  #   secrets.DOCKERHUB_USERNAME
+  #   secrets.DOCKERHUB_TOKEN
   TESSERACT_LANGS: eng
 
 jobs:
@@ -246,25 +250,48 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
       - name: Compute image tags
         id: tags
         run: |
           VERSION="${{ needs.resolve-version.outputs.version }}"
-          BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
           FLAVOUR="${{ matrix.flavour }}"
-
-          TAGS="${BASE}:${FLAVOUR}"
-          if [ "${VERSION}" != "latest" ]; then
-            TAGS="${TAGS},${BASE}:${VERSION}-${FLAVOUR}"
-          fi
-          # Extra tags (e.g. "latest" for the full image)
           EXTRA="${{ matrix.extra_tags }}"
+
+          # --- GHCR tags (always) ---
+          GHCR_BASE="${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}"
+          TAGS="${GHCR_BASE}:${FLAVOUR}"
+          if [ "${VERSION}" != "latest" ]; then
+            TAGS="${TAGS},${GHCR_BASE}:${VERSION}-${FLAVOUR}"
+          fi
           if [ -n "${EXTRA}" ]; then
-            TAGS="${TAGS},${BASE}:${EXTRA}"
+            TAGS="${TAGS},${GHCR_BASE}:${EXTRA}"
             if [ "${VERSION}" != "latest" ]; then
-              TAGS="${TAGS},${BASE}:${VERSION}"
+              TAGS="${TAGS},${GHCR_BASE}:${VERSION}"
             fi
           fi
+
+          # --- Docker Hub tags (opt-in via vars.DOCKERHUB_ENABLED) ---
+          if [ "${{ vars.DOCKERHUB_ENABLED }}" = "true" ]; then
+            DH_IMAGE="${{ vars.DOCKERHUB_IMAGE || env.IMAGE_NAME }}"
+            TAGS="${TAGS},${DH_IMAGE}:${FLAVOUR}"
+            if [ "${VERSION}" != "latest" ]; then
+              TAGS="${TAGS},${DH_IMAGE}:${VERSION}-${FLAVOUR}"
+            fi
+            if [ -n "${EXTRA}" ]; then
+              TAGS="${TAGS},${DH_IMAGE}:${EXTRA}"
+              if [ "${VERSION}" != "latest" ]; then
+                TAGS="${TAGS},${DH_IMAGE}:${VERSION}"
+              fi
+            fi
+          fi
+
           echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
 
       - name: Build and push multi-arch image
@@ -282,7 +309,7 @@ jobs:
           cache-to: type=gha,mode=max,scope=${{ matrix.flavour }}
 
   # ---------------------------------------------------------------------------
-  # Push OCR sidecar to GHCR
+  # Push OCR sidecar
   # ---------------------------------------------------------------------------
   push-ocr-sidecar:
     if: needs.resolve-version.outputs.should_push == 'true'
@@ -304,6 +331,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Log in to Docker Hub
+        if: vars.DOCKERHUB_ENABLED == 'true'
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Compute sidecar tags
+        id: sidecar_tags
+        run: |
+          TAGS="${{ env.REGISTRY }}/${{ github.repository_owner }}/liteparse-ocr-sidecar:latest"
+          if [ "${{ vars.DOCKERHUB_ENABLED }}" = "true" ]; then
+            DH_IMAGE="${{ vars.DOCKERHUB_IMAGE || env.IMAGE_NAME }}"
+            # Derive sidecar name from the main image name
+            TAGS="${TAGS},${DH_IMAGE}-ocr-sidecar:latest"
+          fi
+          echo "tags=${TAGS}" >> "$GITHUB_OUTPUT"
+
       - name: Build and push OCR sidecar
         uses: docker/build-push-action@v6
         with:
@@ -311,7 +356,6 @@ jobs:
           file: ./ocr-server/Dockerfile
           push: true
           platforms: linux/amd64,linux/arm64
-          tags: |
-            ${{ env.REGISTRY }}/${{ github.repository_owner }}/liteparse-ocr-sidecar:latest
+          tags: ${{ steps.sidecar_tags.outputs.tags }}
           cache-from: type=gha,scope=ocr-sidecar
           cache-to: type=gha,mode=max,scope=ocr-sidecar

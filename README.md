@@ -495,7 +495,7 @@ First run installs `pdf-lib` and `docx` into `tests/node_modules/` (also gitigno
 
 ## CI/CD
 
-Images are hosted on **GitHub Container Registry (GHCR)** — free and unlimited for public repositories, with no pull rate limits.
+Images are hosted on **GitHub Container Registry (GHCR)** — free and unlimited for public repositories, with no pull rate limits. Optionally, images can also be published to **Docker Hub** (see [Docker Hub publishing](#docker-hub-publishing) below).
 
 ### Workflows
 
@@ -553,6 +553,33 @@ ghcr.io/<owner>/liteparse:api
 ghcr.io/<owner>/liteparse:1.3.1-api
 ghcr.io/<owner>/liteparse-ocr-sidecar:latest
 ```
+
+### Docker Hub publishing
+
+By default, images are pushed only to GHCR. To **also** publish to Docker Hub, configure these in your repo settings (Settings > Secrets and variables > Actions):
+
+**Variables** (Settings > Variables > New repository variable):
+
+| Variable | Value | Required |
+|---|---|---|
+| `DOCKERHUB_ENABLED` | `true` | yes |
+| `DOCKERHUB_IMAGE` | `youruser/liteparse` | no (defaults to `<owner>/liteparse`) |
+
+**Secrets** (Settings > Secrets > New repository secret):
+
+| Secret | Value | Required |
+|---|---|---|
+| `DOCKERHUB_USERNAME` | Your Docker Hub username | yes |
+| `DOCKERHUB_TOKEN` | Docker Hub access token ([create one here](https://hub.docker.com/settings/security)) | yes |
+
+Once configured, the next push to `main` will publish to both registries with identical tags:
+
+```
+ghcr.io/rafaelgom3s/liteparse:1.3.1-full    # GHCR (always)
+youruser/liteparse:1.3.1-full                # Docker Hub (opt-in)
+```
+
+To disable, delete or set `DOCKERHUB_ENABLED` to any value other than `true`.
 
 ---
 
