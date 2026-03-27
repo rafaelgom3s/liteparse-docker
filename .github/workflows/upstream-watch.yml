@@ -1,0 +1,169 @@
+# =============================================================================
+# Upstream Watch – detect new LiteParse releases and auto-update
+# =============================================================================
+#
+# Runs daily at 06:17 UTC (off-peak minute to avoid GH Actions congestion).
+# Queries the npm registry for the latest @llamaindex/liteparse version.
+# If a newer version is found:
+#   1. Creates a branch with the version bump
+#   2. Opens a PR targeting main
+#   3. The CI workflow runs on the PR (build + test all flavours)
+#   4. If CI passes, the PR can be auto-merged (or manually reviewed)
+#   5. Merging to main triggers CI to publish tested images to GHCR
+#
+# This ensures only versions that pass the full test suite are published.
+# =============================================================================
+
+name: Upstream Watch
+
+on:
+  schedule:
+    # Daily at 06:17 UTC — odd minute avoids Actions scheduling bottleneck
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: "Force check even if version hasn't changed"
+        required: false
+        default: "false"
+        type: choice
+        options: ["true", "false"]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.check.outputs.new_version }}
+      current_version: ${{ steps.check.outputs.current_version }}
+      has_update: ${{ steps.check.outputs.has_update }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for new LiteParse version
+        id: check
+        run: |
+          # Fetch the latest version from npm registry (no auth needed)
+          LATEST=$(curl -sf https://registry.npmjs.org/@llamaindex/liteparse/latest \
+            | jq -r '.version')
+
+          if [ -z "${LATEST}" ] || [ "${LATEST}" = "null" ]; then
+            echo "Failed to fetch latest version from npm"
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CURRENT=$(cat .liteparse-version | tr -d '[:space:]')
+          echo "Current tracked version: ${CURRENT}"
+          echo "Latest npm version:      ${LATEST}"
+
+          echo "current_version=${CURRENT}" >> "$GITHUB_OUTPUT"
+          echo "new_version=${LATEST}" >> "$GITHUB_OUTPUT"
+
+          if [ "${CURRENT}" = "${LATEST}" ] && [ "${{ inputs.force }}" != "true" ]; then
+            echo "No update needed."
+            echo "has_update=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "New version available!"
+            echo "has_update=true" >> "$GITHUB_OUTPUT"
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Create a PR with the version bump
+  # ---------------------------------------------------------------------------
+  create-update-pr:
+    needs: check-upstream
+    if: needs.check-upstream.outputs.has_update == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Create branch and update version
+        id: branch
+        run: |
+          NEW_VERSION="${{ needs.check-upstream.outputs.new_version }}"
+          BRANCH="deps/liteparse-${NEW_VERSION}"
+
+          echo "branch=${BRANCH}" >> "$GITHUB_OUTPUT"
+
+          # Check if a PR for this version already exists
+          EXISTING_PR=$(gh pr list --search "head:${BRANCH}" --json number --jq '.[0].number // empty' 2>/dev/null || true)
+          if [ -n "${EXISTING_PR}" ]; then
+            echo "PR #${EXISTING_PR} already exists for ${BRANCH}. Skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "skip=false" >> "$GITHUB_OUTPUT"
+
+          # Create branch and update version file
+          git checkout -b "${BRANCH}"
+          echo "${NEW_VERSION}" > .liteparse-version
+          git add .liteparse-version
+          git commit -m "deps: bump liteparse to ${NEW_VERSION}
+
+Detected by upstream-watch workflow.
+Previous version: ${{ needs.check-upstream.outputs.current_version }}"
+
+          git push origin "${BRANCH}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create pull request
+        if: steps.branch.outputs.skip != 'true'
+        run: |
+          NEW_VERSION="${{ needs.check-upstream.outputs.new_version }}"
+          OLD_VERSION="${{ needs.check-upstream.outputs.current_version }}"
+
+          gh pr create \
+            --title "deps: bump liteparse to ${NEW_VERSION}" \
+            --body "$(cat <<EOF
+          ## Summary
+
+          Automated version bump detected by the upstream-watch workflow.
+
+          - **Previous version:** \`${OLD_VERSION}\`
+          - **New version:** \`${NEW_VERSION}\`
+          - **npm:** [@llamaindex/liteparse@${NEW_VERSION}](https://www.npmjs.com/package/@llamaindex/liteparse/v/${NEW_VERSION})
+          - **Changelog:** Check the [LiteParse releases](https://github.com/run-llama/liteparse/releases)
+
+          ## What happens next
+
+          1. CI builds and tests all image flavours (base, ocr, full, api) with \`${NEW_VERSION}\`
+          2. If all tests pass, this PR is safe to merge
+          3. Merging to main triggers the publish job → multi-arch images pushed to GHCR
+
+          ## Test plan
+
+          - [ ] CI passes for all four flavours
+          - [ ] OCR sidecar smoke test passes
+          - [ ] Review LiteParse changelog for breaking changes
+
+          > This PR was created automatically by the [upstream-watch workflow](${{ github.server_url }}/${{ github.repository }}/actions/workflows/upstream-watch.yml).
+          EOF
+          )" \
+            --head "${{ steps.branch.outputs.branch }}" \
+            --base main \
+            --label "dependencies,automated"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Enable auto-merge (if repo allows it)
+        if: steps.branch.outputs.skip != 'true'
+        continue-on-error: true
+        run: |
+          PR_NUMBER=$(gh pr list --head "${{ steps.branch.outputs.branch }}" --json number --jq '.[0].number')
+          if [ -n "${PR_NUMBER}" ]; then
+            gh pr merge "${PR_NUMBER}" --auto --squash \
+              --subject "deps: bump liteparse to ${{ needs.check-upstream.outputs.new_version }}" || true
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

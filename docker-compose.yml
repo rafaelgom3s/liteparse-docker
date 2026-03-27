@@ -1,0 +1,151 @@
+name: liteparse
+
+# =============================================================================
+# LiteParse Docker Compose – multi-flavour setup
+# =============================================================================
+#
+# Usage:
+#   docker compose --profile base     build
+#   docker compose --profile ocr      build
+#   docker compose --profile full     build
+#   docker compose --profile api      build && docker compose --profile api up
+#   docker compose --profile ocr-sidecar up   # start EasyOCR sidecar only
+#
+# Env vars you can set (in .env or shell):
+#   TESSERACT_LANGS   Space-separated ISO 639-3 codes   (default: eng)
+#   LITEPARSE_VERSION npm package version               (default: latest)
+#   NODE_VERSION      Node.js major version             (default: 22)
+#   REGISTRY          Image registry prefix             (default: empty)
+# =============================================================================
+
+x-common-build: &common-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    NODE_VERSION: ${NODE_VERSION:-22}
+    LITEPARSE_VERSION: ${LITEPARSE_VERSION:-latest}
+
+x-common-volumes: &common-volumes
+  - type: bind
+    source: ${DOCUMENTS_DIR:-${PWD}}
+    target: /data
+
+services:
+  # ---------------------------------------------------------------------------
+  # base – PDF parsing only; Tesseract.js downloads models at first use
+  # ---------------------------------------------------------------------------
+  liteparse-base:
+    profiles: [base]
+    build:
+      <<: *common-build
+      args:
+        NODE_VERSION: ${NODE_VERSION:-22}
+        LITEPARSE_VERSION: ${LITEPARSE_VERSION:-latest}
+        TESSERACT_LANGS: ""
+        INCLUDE_LIBREOFFICE: "false"
+        INCLUDE_IMAGEMAGICK: "false"
+    image: ${REGISTRY:-}liteparse:base
+    volumes: *common-volumes
+    working_dir: /data
+
+  # ---------------------------------------------------------------------------
+  # ocr – base + pre-baked Tesseract language models (no CDN at parse time)
+  # ---------------------------------------------------------------------------
+  liteparse-ocr:
+    profiles: [ocr]
+    build:
+      <<: *common-build
+      args:
+        NODE_VERSION: ${NODE_VERSION:-22}
+        LITEPARSE_VERSION: ${LITEPARSE_VERSION:-latest}
+        TESSERACT_LANGS: ${TESSERACT_LANGS:-eng}
+        INCLUDE_LIBREOFFICE: "false"
+        INCLUDE_IMAGEMAGICK: "false"
+    image: ${REGISTRY:-}liteparse:ocr
+    volumes: *common-volumes
+    working_dir: /data
+
+  # ---------------------------------------------------------------------------
+  # full – ocr + LibreOffice + ImageMagick (all supported formats)
+  # ---------------------------------------------------------------------------
+  liteparse-full:
+    profiles: [full]
+    build:
+      <<: *common-build
+      args:
+        NODE_VERSION: ${NODE_VERSION:-22}
+        LITEPARSE_VERSION: ${LITEPARSE_VERSION:-latest}
+        TESSERACT_LANGS: ${TESSERACT_LANGS:-eng}
+        INCLUDE_LIBREOFFICE: "true"
+        INCLUDE_IMAGEMAGICK: "true"
+    image: ${REGISTRY:-}liteparse:full
+    volumes: *common-volumes
+    working_dir: /data
+
+  # ---------------------------------------------------------------------------
+  # api – full flavour + Fastify REST API on port 3000
+  # The api-server is bundled into the same image; the entrypoint is overridden
+  # to start the Node.js HTTP server instead of the lit CLI.
+  # ---------------------------------------------------------------------------
+  liteparse-api:
+    profiles: [api]
+    build:
+      <<: *common-build
+      args:
+        NODE_VERSION: ${NODE_VERSION:-22}
+        LITEPARSE_VERSION: ${LITEPARSE_VERSION:-latest}
+        TESSERACT_LANGS: ${TESSERACT_LANGS:-eng}
+        INCLUDE_LIBREOFFICE: "true"
+        INCLUDE_IMAGEMAGICK: "true"
+    image: ${REGISTRY:-}liteparse:api
+    entrypoint: ["node", "/app-src/server.js"]
+    command: []
+    ports:
+      - "${API_PORT:-3000}:3000"
+    environment:
+      PORT: "3000"
+      OCR_SERVER_URL: ${OCR_SERVER_URL:-}
+      TESSDATA_PREFIX: /tessdata
+      HOME: /home/liteparse
+      TMPDIR: /tmp/liteparse
+    volumes: *common-volumes
+    working_dir: /data
+    depends_on:
+      liteparse-ocr-sidecar:
+        condition: service_healthy
+        required: false
+
+  # ---------------------------------------------------------------------------
+  # ocr-sidecar – EasyOCR HTTP server compatible with liteparse's OCR protocol
+  # Point liteparse at it with --ocr-server-url http://liteparse-ocr-sidecar:8080
+  # or set OCR_SERVER_URL=http://liteparse-ocr-sidecar:8080 in the api service.
+  # ---------------------------------------------------------------------------
+  liteparse-ocr-sidecar:
+    profiles: [ocr-sidecar, api]
+    build:
+      context: ./ocr-server
+      dockerfile: Dockerfile
+    image: ${REGISTRY:-}liteparse-ocr-sidecar:latest
+    ports:
+      - "${OCR_SIDECAR_PORT:-8080}:8080"
+    environment:
+      OCR_LANGS: ${OCR_LANGS:-en}
+      # Set to a CUDA device index (e.g. "0") to enable GPU acceleration.
+      # Falls back to CPU automatically when not set or when no GPU is available.
+      CUDA_VISIBLE_DEVICES: ${CUDA_VISIBLE_DEVICES:-}
+    volumes:
+      # Mount a host directory to persist downloaded EasyOCR model files across
+      # container restarts and avoid re-downloading on each startup.
+      - type: volume
+        source: easyocr-models
+        target: /root/.EasyOCR
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+volumes:
+  easyocr-models:
+    driver: local

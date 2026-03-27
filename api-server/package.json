@@ -1,0 +1,21 @@
+{
+  "name": "liteparse-api-server",
+  "version": "1.0.0",
+  "description": "Fastify REST API wrapper for the LiteParse document parser",
+  "main": "server.js",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@fastify/multipart": "^9.0.3",
+    "fastify": "^5.3.3",
+    "adm-zip": "^0.5.16"
+  },
+  "peerDependencies": {
+    "@llamaindex/liteparse": "*"
+  }
+}

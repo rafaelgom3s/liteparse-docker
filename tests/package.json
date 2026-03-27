@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "description": "Dev dependencies for generating test fixtures",
+  "scripts": {
+    "generate": "node generate-fixtures.js"
+  },
+  "dependencies": {
+    "pdf-lib": "^1.17.1",
+    "docx": "^9.4.1"
+  }
+}

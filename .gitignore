@@ -1,0 +1,17 @@
+# Generated test fixtures (recreated by tests/generate-fixtures.sh)
+tests/fixtures/*.pdf
+tests/fixtures/*.docx
+tests/fixtures/*.png
+tests/fixtures/*.zip
+
+# Node
+node_modules/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp

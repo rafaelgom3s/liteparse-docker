@@ -1,0 +1,88 @@
+# =============================================================================
+# Release – create a GitHub Release when the LiteParse version changes
+# =============================================================================
+#
+# Triggered when `.liteparse-version` is modified on main (typically by the
+# upstream-watch PR being merged). Creates a git tag and GitHub Release that
+# mirrors the upstream LiteParse version.
+#
+# The actual image build + push to GHCR is handled by ci.yml (also triggered
+# on push to main). This workflow only adds the git tag and release metadata.
+# =============================================================================
+
+name: Release
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - .liteparse-version
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history for changelog generation
+
+      - name: Read version
+        id: version
+        run: |
+          VERSION=$(cat .liteparse-version | tr -d '[:space:]')
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Detected version: ${VERSION}"
+
+      - name: Check if tag already exists
+        id: check_tag
+        run: |
+          TAG="${{ steps.version.outputs.tag }}"
+          if git rev-parse "${TAG}" >/dev/null 2>&1; then
+            echo "Tag ${TAG} already exists — skipping release."
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Tag ${TAG} does not exist — will create release."
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create GitHub Release
+        if: steps.check_tag.outputs.exists == 'false'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          TAG="${{ steps.version.outputs.tag }}"
+
+          # Find the previous tag for changelog range
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          gh release create "${TAG}" \
+            --title "${TAG}" \
+            --generate-notes \
+            $([ -n "${PREV_TAG}" ] && echo "--notes-start-tag ${PREV_TAG}") \
+            --notes "$(cat <<EOF
+
+          ## Docker images
+
+          Pull the updated images from GHCR:
+
+          \`\`\`bash
+          docker pull ghcr.io/${{ github.repository_owner }}/liteparse:${VERSION}-base
+          docker pull ghcr.io/${{ github.repository_owner }}/liteparse:${VERSION}-ocr
+          docker pull ghcr.io/${{ github.repository_owner }}/liteparse:${VERSION}-full
+          docker pull ghcr.io/${{ github.repository_owner }}/liteparse:${VERSION}-api
+          docker pull ghcr.io/${{ github.repository_owner }}/liteparse:latest
+          \`\`\`
+
+          ## Upstream
+
+          This release tracks [\`@llamaindex/liteparse@${VERSION}\`](https://www.npmjs.com/package/@llamaindex/liteparse/v/${VERSION}).
+          See the [LiteParse changelog](https://github.com/run-llama/liteparse/releases) for details.
+          EOF
+          )"
+
+          echo "Created release ${TAG}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

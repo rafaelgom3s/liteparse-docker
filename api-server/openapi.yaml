@@ -1,0 +1,330 @@
+openapi: 3.0.3
+
+info:
+  title: LiteParse API
+  description: |
+    REST API for [LiteParse](https://developers.llamaindex.ai/liteparse/) —
+    a local, open-source document parser that extracts text with spatial layout
+    information and bounding boxes.
+
+    This API wraps the LiteParse Node.js library in a Fastify HTTP server.
+    It is bundled in the `liteparse:api` Docker image.
+
+    **Base URL:** `http://localhost:3000` (configurable via `PORT` env var)
+  version: 1.0.0
+  contact:
+    name: LiteParse Docker
+  license:
+    name: MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local development
+
+tags:
+  - name: Parsing
+    description: Document parsing endpoints
+  - name: Operations
+    description: Health checks and metadata
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      description: |
+        Liveness probe. Returns a simple status object.
+        Use this for Docker health checks, Kubernetes readiness probes, or load balancer checks.
+      tags: [Operations]
+      responses:
+        "200":
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+              example:
+                status: ok
+
+  /openapi.yaml:
+    get:
+      operationId: getOpenApiSpec
+      summary: OpenAPI specification
+      description: Returns this OpenAPI 3.0 specification as YAML.
+      tags: [Operations]
+      responses:
+        "200":
+          description: OpenAPI spec
+          content:
+            text/yaml:
+              schema:
+                type: string
+
+  /parse:
+    post:
+      operationId: parseDocument
+      summary: Parse a single document
+      description: |
+        Upload a document file and receive extracted text with optional
+        spatial layout information (bounding boxes).
+
+        **Supported formats:**
+        - PDF (`.pdf`) — always supported
+        - Office documents (`.docx`, `.xlsx`, `.pptx`, `.odt`, `.ods`, `.odp`, `.csv`, `.tsv`, `.rtf`) — requires LibreOffice (included in `full` and `api` images)
+        - Images (`.jpg`, `.png`, `.gif`, `.bmp`, `.tiff`, `.webp`, `.svg`) — requires ImageMagick (included in `full` and `api` images)
+
+        The response format depends on the `format` query parameter:
+        - `text` (default): returns the extracted text as `text/plain`
+        - `json`: returns structured data with page-level text items and bounding boxes as `application/json`
+      tags: [Parsing]
+      parameters:
+        - $ref: "#/components/parameters/format"
+        - $ref: "#/components/parameters/ocrLanguage"
+        - $ref: "#/components/parameters/noOcr"
+        - $ref: "#/components/parameters/targetPages"
+        - $ref: "#/components/parameters/dpi"
+        - $ref: "#/components/parameters/ocrServerUrl"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: The document file to parse (max 500 MB).
+      responses:
+        "200":
+          description: Successfully parsed document
+          content:
+            text/plain:
+              schema:
+                type: string
+              example: |
+                Hello LiteParse
+
+                This is the extracted text from the document.
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ParseResultJson"
+        "400":
+          description: No file uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: 'No file uploaded. Send a multipart/form-data request with a "file" field.'
+        "500":
+          description: Parse error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /batch-parse:
+    post:
+      operationId: batchParseDocuments
+      summary: Parse multiple documents from a ZIP archive
+      description: |
+        Upload a ZIP archive containing one or more documents. Each document
+        is parsed individually and the results are returned as a ZIP archive.
+
+        **Output filenames:**
+        - `text` format: `<original-name>.txt`
+        - `json` format: `<original-name>.json`
+        - Failed entries: `<original-name>.error.txt`
+
+        Files that fail to parse do **not** abort the batch — an error file
+        is included in the output ZIP instead.
+      tags: [Parsing]
+      parameters:
+        - $ref: "#/components/parameters/format"
+        - $ref: "#/components/parameters/ocrLanguage"
+        - $ref: "#/components/parameters/noOcr"
+        - $ref: "#/components/parameters/targetPages"
+        - $ref: "#/components/parameters/dpi"
+        - $ref: "#/components/parameters/ocrServerUrl"
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: A ZIP archive containing documents to parse (max 500 MB).
+      responses:
+        "200":
+          description: ZIP archive containing parsed results
+          headers:
+            Content-Disposition:
+              schema:
+                type: string
+                example: 'attachment; filename="results.zip"'
+          content:
+            application/zip:
+              schema:
+                type: string
+                format: binary
+        "400":
+          description: No file uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+              example:
+                error: 'No file uploaded. Send a ZIP archive with a "file" field.'
+        "500":
+          description: Server error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+components:
+  parameters:
+    format:
+      name: format
+      in: query
+      required: false
+      description: |
+        Output format.
+        - `text`: plain text extraction (default)
+        - `json`: structured JSON with bounding boxes and page-level data
+      schema:
+        type: string
+        enum: [text, json]
+        default: text
+
+    ocrLanguage:
+      name: ocrLanguage
+      in: query
+      required: false
+      description: |
+        ISO 639-3 language code for OCR. Applies when processing scanned
+        documents or embedded images. Common codes: `eng` (English),
+        `fra` (French), `deu` (German), `jpn` (Japanese), `chi_sim`
+        (Simplified Chinese).
+      schema:
+        type: string
+        default: eng
+
+    noOcr:
+      name: noOcr
+      in: query
+      required: false
+      description: |
+        Set to `true` to skip OCR entirely. Faster for text-native PDFs
+        that don't contain scanned images.
+      schema:
+        type: string
+        enum: ["true", "false"]
+        default: "false"
+
+    targetPages:
+      name: targetPages
+      in: query
+      required: false
+      description: |
+        Page range to parse. Comma-separated list of page numbers and/or
+        ranges. Examples: `1`, `1-5`, `1-3,7,10-12`. Omit to parse all pages.
+      schema:
+        type: string
+      example: "1-5,10"
+
+    dpi:
+      name: dpi
+      in: query
+      required: false
+      description: Rendering resolution in dots per inch. Higher values improve OCR accuracy but increase processing time.
+      schema:
+        type: integer
+        minimum: 72
+        maximum: 600
+        default: 150
+
+    ocrServerUrl:
+      name: ocrServerUrl
+      in: query
+      required: false
+      description: |
+        URL of an external OCR server (e.g. the EasyOCR sidecar).
+        Overrides the `OCR_SERVER_URL` environment variable for this request.
+      schema:
+        type: string
+        format: uri
+      example: http://localhost:8080
+
+  schemas:
+    HealthResponse:
+      type: object
+      required: [status]
+      properties:
+        status:
+          type: string
+          enum: [ok]
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
+          description: Human-readable error message.
+
+    ParseResultJson:
+      type: object
+      description: |
+        Structured parse result returned when `format=json`.
+        Contains per-page text items with spatial position data.
+      properties:
+        pages:
+          type: array
+          items:
+            $ref: "#/components/schemas/Page"
+
+    Page:
+      type: object
+      properties:
+        page:
+          type: integer
+          description: 1-based page number.
+        width:
+          type: number
+          description: Page width in PDF points (1 point = 1/72 inch).
+        height:
+          type: number
+          description: Page height in PDF points.
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/TextItem"
+
+    TextItem:
+      type: object
+      description: |
+        A text element with its spatial position on the page.
+        Coordinates originate at the top-left corner of the page.
+      properties:
+        text:
+          type: string
+          description: The extracted text content.
+        x:
+          type: number
+          description: Horizontal offset from the left edge (PDF points).
+        y:
+          type: number
+          description: Vertical offset from the top edge (PDF points).
+        width:
+          type: number
+          description: Bounding box width (PDF points).
+        height:
+          type: number
+          description: Bounding box height (PDF points).

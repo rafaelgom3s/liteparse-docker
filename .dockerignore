@@ -1,0 +1,12 @@
+# Send only what the Dockerfile explicitly needs.
+# Everything is excluded by default; exceptions are listed below.
+
+**
+
+# Required source files
+!Dockerfile
+!api-server/package.json
+!api-server/server.js
+!api-server/openapi.yaml
+!ocr-server/Dockerfile
+!ocr-server/server.py
