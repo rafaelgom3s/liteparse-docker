@@ -1,0 +1,79 @@
+name: Bug Report
+description: Report a problem with the Docker images or API server
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please fill out the sections below.
+
+  - type: dropdown
+    id: flavour
+    attributes:
+      label: Image flavour
+      description: Which image are you using?
+      options:
+        - "base"
+        - "ocr"
+        - "full"
+        - "api"
+        - "ocr-sidecar"
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Image tag / version
+      description: "e.g. liteparse:1.3.1-full or liteparse:latest"
+      placeholder: "liteparse:latest"
+    validations:
+      required: true
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: A clear description of the bug.
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Exact commands or steps to reproduce the issue.
+      placeholder: |
+        1. docker run --rm -v "$PWD:/data" liteparse:full parse /data/file.pdf
+        2. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: |
+        Please provide:
+        - Host OS and architecture (e.g. macOS ARM64, Ubuntu x86_64)
+        - Docker version (`docker version`)
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any error output or logs.
+      render: shell
+    validations:
+      required: false

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: LiteParse (upstream) issues
+    url: https://github.com/run-llama/liteparse/issues
+    about: For bugs in LiteParse itself (not the Docker packaging), report upstream.
+  - name: Security vulnerability
+    url: https://github.com/rafaelgom3s/liteparse-docker/security/advisories/new
+    about: Report security issues privately (do not use public issues).

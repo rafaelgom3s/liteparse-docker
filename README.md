@@ -1,8 +1,15 @@
 # liteparse-docker
 
+[![CI](https://github.com/rafaelgom3s/liteparse-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/rafaelgom3s/liteparse-docker/actions/workflows/ci.yml)
+[![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
+[![GHCR](https://img.shields.io/badge/GHCR-liteparse-blue?logo=github)](https://github.com/rafaelgom3s/liteparse-docker/pkgs/container/liteparse)
+[![Upstream](https://img.shields.io/badge/upstream-LiteParse-orange)](https://developers.llamaindex.ai/liteparse/)
+
 Parameterisable Docker build for [LiteParse](https://developers.llamaindex.ai/liteparse/) — the local, open-source document parser by [LlamaIndex](https://www.llamaindex.ai/).
 
 A single `Dockerfile` produces multiple image **flavours** via build arguments, ranging from a minimal PDF-only container to a full multi-format parser with pre-baked OCR models, a REST API, and an optional high-accuracy OCR sidecar.
+
+> **Contributing?** See [CONTRIBUTING.md](CONTRIBUTING.md) | **Security issue?** See [SECURITY.md](SECURITY.md) | **Code of Conduct:** [Contributor Covenant v2.1](CODE_OF_CONDUCT.md)
 
 ---
 

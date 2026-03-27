@@ -98,6 +98,14 @@ RUN npm install --omit=dev \
 # -----------------------------------------------------------------------------
 FROM node:${NODE_VERSION}-bookworm-slim AS final
 
+# OCI image metadata — https://github.com/opencontainers/image-spec/blob/main/annotations.md
+LABEL org.opencontainers.image.title="liteparse-docker" \
+      org.opencontainers.image.description="Parameterised Docker images for LiteParse document parser" \
+      org.opencontainers.image.url="https://github.com/rafaelgom3s/liteparse-docker" \
+      org.opencontainers.image.source="https://github.com/rafaelgom3s/liteparse-docker" \
+      org.opencontainers.image.licenses="Apache-2.0" \
+      org.opencontainers.image.vendor="Rafael Gomes"
+
 ARG LITEPARSE_VERSION
 ARG TESSERACT_LANGS
 ARG INCLUDE_LIBREOFFICE

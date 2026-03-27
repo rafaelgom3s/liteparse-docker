@@ -2,6 +2,10 @@
 
 Thank you for your interest in contributing! This project provides Docker packaging for [LiteParse](https://developers.llamaindex.ai/liteparse/). We welcome bug reports, feature proposals, and pull requests.
 
+Please note that this project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.md). By participating, you are expected to uphold its terms.
+
+For **security vulnerabilities**, do not open a public issue — see [SECURITY.md](SECURITY.md) instead.
+
 ## Reporting bugs
 
 Open a [GitHub Issue](https://github.com/rafaelgom3s/liteparse-docker/issues/new) with:
