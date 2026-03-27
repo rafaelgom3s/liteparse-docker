@@ -1,0 +1,116 @@
+# =============================================================================
+# Cleanup – prune old container image versions from GHCR
+# =============================================================================
+#
+# Runs after the CI publish job completes, or on a weekly schedule.
+# Keeps the N most recent semver-tagged image versions and deletes the rest.
+# Rolling tags (:base, :ocr, :full, :api, :latest) are never deleted.
+#
+# This prevents unbounded growth of the GHCR package storage.
+# =============================================================================
+
+name: Cleanup
+
+on:
+  # Run after CI publishes new images
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+  # Weekly safety net in case workflow_run misses
+  schedule:
+    - cron: "42 3 * * 0" # Sundays at 03:42 UTC
+  workflow_dispatch:
+
+permissions:
+  packages: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  # Number of most recent semver versions to keep per package
+  KEEP_VERSIONS: 3
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    # Only run if CI succeeded (or if manually/schedule triggered)
+    if: >
+      github.event_name != 'workflow_run' ||
+      github.event.workflow_run.conclusion == 'success'
+    strategy:
+      matrix:
+        package: [liteparse, liteparse-ocr-sidecar]
+    steps:
+      - name: Delete old container image versions
+        run: |
+          PACKAGE="${{ matrix.package }}"
+          OWNER="${{ github.repository_owner }}"
+          KEEP="${{ env.KEEP_VERSIONS }}"
+
+          echo "Cleaning up ghcr.io/${OWNER}/${PACKAGE} — keeping ${KEEP} most recent versions"
+
+          # List all versions of this package, sorted newest first.
+          # Each version can have multiple tags. We want to:
+          #   1. Identify versions tagged with a semver pattern (e.g. "1.3.1-base")
+          #   2. Group by semver prefix (e.g. "1.3.1")
+          #   3. Keep the N most recent semver groups
+          #   4. Delete all versions belonging to older semver groups
+          #   5. Never delete untagged versions that are referenced by multi-arch manifests
+
+          # Fetch all versions (paginated)
+          ALL_VERSIONS=$(gh api \
+            --paginate \
+            "/users/${OWNER}/packages/container/${PACKAGE}/versions" \
+            --jq '.[] | {id: .id, tags: [.metadata.container.tags[]], created: .created_at}' \
+            2>/dev/null) || {
+            echo "Could not list versions for ${PACKAGE} (may not exist yet). Skipping."
+            exit 0
+          }
+
+          if [ -z "${ALL_VERSIONS}" ]; then
+            echo "No versions found. Skipping."
+            exit 0
+          fi
+
+          # Extract unique semver prefixes from tags, sorted newest first.
+          # Tags look like: "1.3.1-base", "1.3.1-ocr", "1.3.1", "base", "latest"
+          # We extract the "X.Y.Z" prefix where it exists.
+          SEMVERS=$(echo "${ALL_VERSIONS}" \
+            | jq -r '.tags[]' \
+            | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' \
+            | sort -Vru)
+
+          TOTAL_SEMVERS=$(echo "${SEMVERS}" | grep -c . || true)
+          echo "Found ${TOTAL_SEMVERS} semver version(s): $(echo ${SEMVERS} | tr '\n' ' ')"
+
+          if [ "${TOTAL_SEMVERS}" -le "${KEEP}" ]; then
+            echo "Only ${TOTAL_SEMVERS} version(s) — nothing to clean up (keeping ${KEEP})."
+            exit 0
+          fi
+
+          # Versions to delete: everything after the first KEEP
+          DELETE_SEMVERS=$(echo "${SEMVERS}" | tail -n +$((KEEP + 1)))
+          echo "Will delete versions: $(echo ${DELETE_SEMVERS} | tr '\n' ' ')"
+
+          # For each old semver, find and delete all version IDs that have tags
+          # starting with that semver prefix.
+          for OLD_VER in ${DELETE_SEMVERS}; do
+            echo "--- Deleting images tagged ${OLD_VER}-* ---"
+
+            # Find version IDs whose tags contain this semver prefix
+            VERSION_IDS=$(echo "${ALL_VERSIONS}" \
+              | jq -r "select(.tags[] | startswith(\"${OLD_VER}\")) | .id" \
+              | sort -u)
+
+            for VID in ${VERSION_IDS}; do
+              echo "  Deleting version ID ${VID}"
+              gh api \
+                --method DELETE \
+                "/users/${OWNER}/packages/container/${PACKAGE}/versions/${VID}" \
+                2>/dev/null || echo "  Warning: failed to delete ${VID} (may be referenced by a manifest)"
+            done
+          done
+
+          echo "Cleanup complete for ${PACKAGE}."
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
