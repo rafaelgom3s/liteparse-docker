@@ -3,7 +3,7 @@
 [![CI](https://github.com/rafaelgom3s/liteparse-docker/actions/workflows/ci.yml/badge.svg)](https://github.com/rafaelgom3s/liteparse-docker/actions/workflows/ci.yml)
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](LICENSE)
 [![GHCR](https://img.shields.io/badge/GHCR-liteparse-blue?logo=github)](https://github.com/rafaelgom3s/liteparse-docker/pkgs/container/liteparse)
-[![Upstream](https://img.shields.io/badge/upstream-LiteParse-orange)](https://developers.llamaindex.ai/liteparse/)
+[![Upstream](https://img.shields.io/badge/upstream-LiteParse-orange)](https://github.com/run-llama/liteparse)
 
 Parameterisable Docker build for [LiteParse](https://developers.llamaindex.ai/liteparse/) — the local, open-source document parser by [LlamaIndex](https://www.llamaindex.ai/).
 
