@@ -1,12 +1,12 @@
 # =============================================================================
-# Upstream Watch – detect new LiteParse releases and auto-update
+# Upstream Watch - detect new LiteParse releases and auto-update
 # =============================================================================
 #
 # Runs daily at 06:17 UTC (off-peak minute to avoid GH Actions congestion).
 # Queries the npm registry for the latest @llamaindex/liteparse version.
 #
 # A PR is created ONLY when a new liteparse version is detected. Published
-# image tags are immutable and track the liteparse version — security patches
+# image tags are immutable and track the liteparse version -- security patches
 # to api-server/ocr-server dependencies are NOT grounds for a new PR. Those
 # deps use semver ranges (npm ^, pip >=) and resolve to latest compatible
 # versions at Docker build time, so each new liteparse release inherently
@@ -20,14 +20,14 @@
 #   2. audit-deps: run security audits on api-server + ocr-server deps
 #   3. create-update-pr: open PR with version bump + audit report
 #   4. CI runs on the PR (build + test all flavours)
-#   5. Merge → publish to GHCR (+ Docker Hub if enabled)
+#   5. Merge -> publish to GHCR (+ Docker Hub if enabled)
 # =============================================================================
 
 name: Upstream Watch
 
 on:
   schedule:
-    # Daily at 06:17 UTC — odd minute avoids Actions scheduling bottleneck
+    # Daily at 06:17 UTC - odd minute avoids Actions scheduling bottleneck
     - cron: "17 6 * * *"
   workflow_dispatch:
     inputs:
@@ -224,7 +224,7 @@ Previous version: ${{ needs.check-upstream.outputs.current_version }}"
 
           1. CI builds and tests all image flavours (base, ocr, full, api) with \`${NEW_VERSION}\`
           2. If all tests pass, this PR is safe to merge
-          3. Merging to main triggers the publish job — multi-arch images pushed to GHCR
+          3. Merging to main triggers the publish job - multi-arch images pushed to GHCR
 
           ## Test plan
 
