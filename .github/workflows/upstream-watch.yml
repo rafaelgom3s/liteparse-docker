@@ -196,6 +196,10 @@ jobs:
           NPM_AUDIT="${{ needs.audit-deps.outputs.npm_audit }}"
           PIP_AUDIT="${{ needs.audit-deps.outputs.pip_audit }}"
 
+          # Ensure labels exist (idempotent)
+          gh label create "dependencies" --color "0075ca" --description "Dependency updates" --force 2>/dev/null || true
+          gh label create "automated"    --color "e4e669" --description "Automated by GitHub Actions" --force 2>/dev/null || true
+
           gh pr create \
             --title "deps: bump liteparse to ${NEW_VERSION}" \
             --body "$(cat <<EOF
