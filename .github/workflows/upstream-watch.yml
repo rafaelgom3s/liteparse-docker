@@ -244,6 +244,19 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Trigger CI checks on PR branch
+        if: steps.branch.outputs.skip != 'true'
+        run: |
+          BRANCH="${{ steps.branch.outputs.branch }}"
+          # Dispatch CI on the PR branch so check results appear in the PR checks tab.
+          # Version is read from .liteparse-version on that branch; push_images
+          # defaults to false so no images are published during the PR check run.
+          gh workflow run ci.yml \
+            --repo "${{ github.repository }}" \
+            --ref "${BRANCH}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Enable auto-merge (if repo allows it)
         if: steps.branch.outputs.skip != 'true'
         continue-on-error: true
