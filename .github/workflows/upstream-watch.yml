@@ -181,10 +181,8 @@ jobs:
           git checkout -b "${BRANCH}"
           echo "${NEW_VERSION}" > .liteparse-version
           git add .liteparse-version
-          git commit -m "deps: bump liteparse to ${NEW_VERSION}
-
-Detected by upstream-watch workflow.
-Previous version: ${{ needs.check-upstream.outputs.current_version }}"
+          COMMIT_MSG="deps: bump liteparse to ${NEW_VERSION}"$'\n\n'"Detected by upstream-watch workflow."$'\n'"Previous version: ${{ needs.check-upstream.outputs.current_version }}"
+          git commit -m "${COMMIT_MSG}"
 
           git push origin "${BRANCH}"
         env:
