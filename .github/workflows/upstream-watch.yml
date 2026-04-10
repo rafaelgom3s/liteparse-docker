@@ -241,25 +241,10 @@ jobs:
             --head "${{ steps.branch.outputs.branch }}" \
             --base main \
             --label "dependencies,automated"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Trigger CI checks on PR branch
-        if: steps.branch.outputs.skip != 'true'
-        # GITHUB_TOKEN cannot dispatch other workflows (GitHub anti-loop protection).
-        # Requires a Fine-Grained PAT with Actions: write stored as AUTOMATION_PAT.
-        # Without it this step fails but the PR is still created; CI can be triggered
-        # manually from the PR's Checks tab until the secret is configured.
-        continue-on-error: true
-        run: |
-          BRANCH="${{ steps.branch.outputs.branch }}"
-          # Dispatch CI on the PR branch. Results appear in the PR's Checks tab
-          # because GitHub links check runs to commits, not to triggering events.
-          # Version is read from .liteparse-version on that branch; push_images
-          # defaults to false so no images are published during the PR check run.
-          gh workflow run ci.yml \
-            --repo "${{ github.repository }}" \
-            --ref "${BRANCH}"
+        # AUTOMATION_PAT (not GITHUB_TOKEN) is required so GitHub fires the
+        # pull_request event, which causes CI to trigger and link its check
+        # suite to the PR. GITHUB_TOKEN-created PRs are invisible to branch
+        # protection checks (statusCheckRollup returns null).
         env:
           GH_TOKEN: ${{ secrets.AUTOMATION_PAT }}
 
