@@ -26,7 +26,6 @@ permissions:
   packages: write
 
 env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   # Number of most recent semver versions to keep per package
   KEEP_VERSIONS: 3
 

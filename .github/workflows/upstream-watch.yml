@@ -42,9 +42,6 @@ permissions:
   contents: write
   pull-requests: write
 
-env:
-  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
-
 jobs:
   # ---------------------------------------------------------------------------
   # 1. Check for new LiteParse version on npm
@@ -56,7 +53,7 @@ jobs:
       current_version: ${{ steps.check.outputs.current_version }}
       has_update: ${{ steps.check.outputs.has_update }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Check for new LiteParse version
         id: check
@@ -98,7 +95,7 @@ jobs:
       npm_audit: ${{ steps.npm.outputs.report }}
       pip_audit: ${{ steps.pip.outputs.report }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Audit api-server npm dependencies
         id: npm
@@ -152,7 +149,7 @@ jobs:
     if: needs.check-upstream.outputs.has_update == 'true'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Configure git
         run: |
