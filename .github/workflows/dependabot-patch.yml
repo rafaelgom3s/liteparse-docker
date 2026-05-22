@@ -1,0 +1,89 @@
+# =============================================================================
+# Dependabot Patch – increment patch level on dependency merges
+# =============================================================================
+#
+# When a dependabot-authored PR is merged to main that changes npm or pip
+# dependency files, this workflow increments .patch-level, commits, and
+# triggers the release workflow.
+#
+# GitHub Actions version bumps (.github/workflows/) are intentionally excluded
+# — they don't affect the Docker image content.
+#
+# Concurrency group ensures sequential execution when multiple dependabot PRs
+# merge in quick succession.
+# =============================================================================
+
+name: Dependabot Patch
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'api-server/package.json'
+      - 'api-server/package-lock.json'
+      - 'ocr-server/requirements.txt'
+
+concurrency:
+  group: dependabot-patch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  increment-patch:
+    runs-on: ubuntu-latest
+    # Only run when the pusher is dependabot (or github-actions from dependabot rebase)
+    if: github.actor == 'dependabot[bot]' || github.actor == 'github-actions[bot]'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Need full history to push back to main
+          fetch-depth: 0
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Increment patch level
+        id: increment
+        run: |
+          # Read current patch level (default 0 if missing)
+          if [ -f .patch-level ]; then
+            CURRENT=$(cat .patch-level | tr -d '[:space:]')
+          else
+            CURRENT="0"
+          fi
+
+          # Validate
+          if ! echo "${CURRENT}" | grep -qE '^[0-9]+$'; then
+            echo "::error::Malformed .patch-level ('${CURRENT}')"
+            exit 1
+          fi
+
+          NEW=$((CURRENT + 1))
+          echo "${NEW}" > .patch-level
+
+          echo "patch_level=${NEW}" >> "$GITHUB_OUTPUT"
+          echo "Incremented .patch-level: ${CURRENT} → ${NEW}"
+
+      - name: Commit and push
+        run: |
+          git add .patch-level
+          git commit -m "chore: bump patch level to ${{ steps.increment.outputs.patch_level }}"
+          git push origin main
+
+      - name: Compute tag
+        id: tag
+        uses: ./.github/actions/compute-tag
+
+      - name: Trigger release workflow
+        run: |
+          echo "Triggering release for tag: ${{ steps.tag.outputs.tag }}"
+          gh workflow run release.yml \
+            --ref main \
+            -f tag="${{ steps.tag.outputs.tag }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

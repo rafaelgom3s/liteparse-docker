@@ -69,17 +69,21 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Compute tag
+        id: computed
+        uses: ./.github/actions/compute-tag
+
       - name: Resolve version and push flag
         id: resolve
         run: |
-          # Version priority: workflow input > .liteparse-version file
+          # Version priority: workflow input > computed docker_version
           INPUT_VERSION="${{ inputs.liteparse_version }}"
-          FILE_VERSION=$(cat .liteparse-version | tr -d '[:space:]')
+          COMPUTED_VERSION="${{ steps.computed.outputs.docker_version }}"
 
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
-            VERSION="${FILE_VERSION}"
+            VERSION="${COMPUTED_VERSION}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 

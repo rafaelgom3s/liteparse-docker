@@ -1,0 +1,84 @@
+# =============================================================================
+# Compute Tag – resolve version + patch level into release tag
+# =============================================================================
+#
+# Reads .liteparse-version and .patch-level from the repo root, computes the
+# release tag, Docker-compatible version string, and metadata outputs.
+#
+# Outputs:
+#   tag            "v1.5.0-2" or "v1.5.0" (when patch=0)
+#   version        "1.5.0"  (upstream version only)
+#   docker_version "1.5.0-2" or "1.5.0" (for Docker image tags)
+#   is_patch       "true" if patch > 0, "false" otherwise
+#   patch_level    "2" (raw integer)
+#   rolling_tag    "latest" if patch=0, "" (empty) if patch>0
+# =============================================================================
+
+name: Compute Tag
+description: Resolve version and patch level into release tag and metadata
+
+outputs:
+  tag:
+    description: "Git tag (e.g. v1.5.0-2 or v1.5.0)"
+    value: ${{ steps.compute.outputs.tag }}
+  version:
+    description: "Upstream version only (e.g. 1.5.0)"
+    value: ${{ steps.compute.outputs.version }}
+  docker_version:
+    description: "Docker-compatible version (e.g. 1.5.0-2 or 1.5.0)"
+    value: ${{ steps.compute.outputs.docker_version }}
+  is_patch:
+    description: "'true' if patch level > 0, 'false' otherwise"
+    value: ${{ steps.compute.outputs.is_patch }}
+  patch_level:
+    description: "Raw patch level integer"
+    value: ${{ steps.compute.outputs.patch_level }}
+  rolling_tag:
+    description: "'latest' for base releases, empty for patches"
+    value: ${{ steps.compute.outputs.rolling_tag }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute tag from version and patch level
+      id: compute
+      shell: bash
+      run: |
+        # Read upstream version
+        VERSION=$(cat .liteparse-version | tr -d '[:space:]')
+
+        # Read patch level with graceful fallback to 0
+        if [ -f .patch-level ]; then
+          PATCH=$(cat .patch-level | tr -d '[:space:]')
+        else
+          PATCH="0"
+        fi
+
+        # Validate patch level is a non-negative integer
+        if ! echo "${PATCH}" | grep -qE '^[0-9]+$'; then
+          echo "::warning::Malformed .patch-level ('${PATCH}') — defaulting to 0"
+          PATCH="0"
+        fi
+
+        # Compute outputs
+        if [ "${PATCH}" -gt 0 ]; then
+          TAG="v${VERSION}-${PATCH}"
+          DOCKER_VERSION="${VERSION}-${PATCH}"
+          IS_PATCH="true"
+          ROLLING_TAG=""
+        else
+          TAG="v${VERSION}"
+          DOCKER_VERSION="${VERSION}"
+          IS_PATCH="false"
+          ROLLING_TAG="latest"
+        fi
+
+        # Write outputs
+        echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+        echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+        echo "docker_version=${DOCKER_VERSION}" >> "$GITHUB_OUTPUT"
+        echo "is_patch=${IS_PATCH}" >> "$GITHUB_OUTPUT"
+        echo "patch_level=${PATCH}" >> "$GITHUB_OUTPUT"
+        echo "rolling_tag=${ROLLING_TAG}" >> "$GITHUB_OUTPUT"
+
+        echo "Computed: tag=${TAG} version=${VERSION} docker_version=${DOCKER_VERSION} is_patch=${IS_PATCH} patch_level=${PATCH} rolling_tag=${ROLLING_TAG}"
