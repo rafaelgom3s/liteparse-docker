@@ -16,7 +16,8 @@
 name: Dependabot Patch
 
 on:
-  push:
+  pull_request:
+    types: [closed]
     branches: [main]
     paths:
       - 'api-server/package.json'
@@ -34,8 +35,10 @@ permissions:
 jobs:
   increment-patch:
     runs-on: ubuntu-latest
-    # Only run when the pusher is dependabot (or github-actions from dependabot rebase)
-    if: github.actor == 'dependabot[bot]' || github.actor == 'github-actions[bot]'
+    # Only run when a dependabot PR is merged (not just closed)
+    if: >-
+      github.event.pull_request.merged == true &&
+      github.event.pull_request.user.login == 'dependabot[bot]'
     steps:
       - uses: actions/checkout@v6
         with:
