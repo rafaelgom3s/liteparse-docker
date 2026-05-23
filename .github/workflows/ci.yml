@@ -76,16 +76,20 @@ jobs:
       - name: Resolve version and push flag
         id: resolve
         run: |
-          # Version priority: workflow input > computed docker_version
+          # Version priority: workflow input > upstream version (no patch suffix)
+          # The upstream version is used for npm install (e.g. @llamaindex/liteparse@1.5.3)
+          # The docker_version (with patch suffix) is used for Docker image tags
           INPUT_VERSION="${{ inputs.liteparse_version }}"
-          COMPUTED_VERSION="${{ steps.computed.outputs.docker_version }}"
+          UPSTREAM_VERSION="${{ steps.computed.outputs.version }}"
+          DOCKER_VERSION="${{ steps.computed.outputs.docker_version }}"
 
           if [ -n "${INPUT_VERSION}" ]; then
             VERSION="${INPUT_VERSION}"
           else
-            VERSION="${COMPUTED_VERSION}"
+            VERSION="${UPSTREAM_VERSION}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "docker_version=${DOCKER_VERSION}" >> "$GITHUB_OUTPUT"
 
           # Push only on: push to main, or explicit input, or workflow_call
           SHOULD_PUSH="false"
@@ -264,7 +268,8 @@ jobs:
       - name: Compute image tags
         id: tags
         run: |
-          VERSION="${{ needs.resolve-version.outputs.version }}"
+          # Use docker_version for image tags (includes patch suffix like 1.5.3-2)
+          VERSION="${{ needs.resolve-version.outputs.docker_version }}"
           FLAVOUR="${{ matrix.flavour }}"
           EXTRA="${{ matrix.extra_tags }}"
 
