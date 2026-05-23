@@ -27,7 +27,7 @@ permissions:
 
 env:
   # Number of most recent semver versions to keep per package
-  KEEP_VERSIONS: 3
+  KEEP_VERSIONS: 5
 
 jobs:
   cleanup:
@@ -72,8 +72,8 @@ jobs:
           fi
 
           # Extract unique semver prefixes from tags, sorted newest first.
-          # Tags look like: "1.3.1-base", "1.3.1-ocr", "1.3.1", "base", "latest"
-          # We extract the "X.Y.Z" prefix where it exists.
+          # Tags look like: "1.3.1-base", "1.3.1-1-base", "1.3.1-2-base", "1.3.1", "base", "latest"
+          # The regex extracts the "X.Y.Z" base prefix, grouping 1.3.1-1 and 1.3.1-2 under "1.3.1".
           SEMVERS=$(echo "${ALL_VERSIONS}" \
             | jq -r '.tags[]' \
             | grep -oE '^[0-9]+\.[0-9]+\.[0-9]+' \

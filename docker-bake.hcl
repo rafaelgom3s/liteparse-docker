@@ -40,6 +40,10 @@ variable "TESSERACT_LANGS" {
   default = "eng"
 }
 
+variable "PATCH_SUFFIX" {
+  default = ""
+}
+
 # Shared configuration inherited by all targets
 target "_common" {
   context    = "."
@@ -63,7 +67,7 @@ target "base" {
   }
   tags = [
     "${REGISTRY}liteparse:base",
-    "${REGISTRY}liteparse:${LITEPARSE_VERSION}-base",
+    "${REGISTRY}liteparse:${LITEPARSE_VERSION}${PATCH_SUFFIX}-base",
   ]
 }
 
@@ -79,7 +83,7 @@ target "ocr" {
   }
   tags = [
     "${REGISTRY}liteparse:ocr",
-    "${REGISTRY}liteparse:${LITEPARSE_VERSION}-ocr",
+    "${REGISTRY}liteparse:${LITEPARSE_VERSION}${PATCH_SUFFIX}-ocr",
   ]
 }
 
@@ -95,7 +99,7 @@ target "full" {
   }
   tags = [
     "${REGISTRY}liteparse:full",
-    "${REGISTRY}liteparse:${LITEPARSE_VERSION}-full",
+    "${REGISTRY}liteparse:${LITEPARSE_VERSION}${PATCH_SUFFIX}-full",
     # "latest" points to the fully-featured image
     "${REGISTRY}liteparse:latest",
   ]
@@ -115,7 +119,7 @@ target "api" {
   }
   tags = [
     "${REGISTRY}liteparse:api",
-    "${REGISTRY}liteparse:${LITEPARSE_VERSION}-api",
+    "${REGISTRY}liteparse:${LITEPARSE_VERSION}${PATCH_SUFFIX}-api",
   ]
 }
 

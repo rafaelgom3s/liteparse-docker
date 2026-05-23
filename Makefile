@@ -23,6 +23,7 @@
 
 NODE_VERSION  ?= 22
 VERSION       ?= latest
+PATCH_SUFFIX  ?=
 LANGS         ?= eng
 REGISTRY      ?=
 DOCUMENTS_DIR ?= $(PWD)
@@ -48,7 +49,7 @@ base:
 	    --build-arg INCLUDE_LIBREOFFICE=false \
 	    --build-arg INCLUDE_IMAGEMAGICK=false \
 	    --tag $(IMAGE_PREFIX)liteparse:base \
-	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)-base \
+	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)$(PATCH_SUFFIX)-base \
 	    .
 
 ## ocr: base + pre-baked Tesseract models (use LANGS= to specify languages)
@@ -60,7 +61,7 @@ ocr:
 	    --build-arg INCLUDE_LIBREOFFICE=false \
 	    --build-arg INCLUDE_IMAGEMAGICK=false \
 	    --tag $(IMAGE_PREFIX)liteparse:ocr \
-	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)-ocr \
+	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)$(PATCH_SUFFIX)-ocr \
 	    .
 
 ## full: ocr + LibreOffice + ImageMagick (all formats supported)
@@ -72,14 +73,14 @@ full:
 	    --build-arg INCLUDE_LIBREOFFICE=true \
 	    --build-arg INCLUDE_IMAGEMAGICK=true \
 	    --tag $(IMAGE_PREFIX)liteparse:full \
-	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)-full \
+	    --tag $(IMAGE_PREFIX)liteparse:$(VERSION)$(PATCH_SUFFIX)-full \
 	    --tag $(IMAGE_PREFIX)liteparse:latest \
 	    .
 
 ## api: full + Fastify REST API server bundled; start with run-api
 api: full
 	docker tag $(IMAGE_PREFIX)liteparse:full $(IMAGE_PREFIX)liteparse:api
-	docker tag $(IMAGE_PREFIX)liteparse:full $(IMAGE_PREFIX)liteparse:$(VERSION)-api
+	docker tag $(IMAGE_PREFIX)liteparse:full $(IMAGE_PREFIX)liteparse:$(VERSION)$(PATCH_SUFFIX)-api
 
 ## ocr-sidecar: build the EasyOCR Python sidecar image
 ocr-sidecar:
@@ -93,6 +94,7 @@ multi-arch:
 	REGISTRY=$(REGISTRY) \
 	NODE_VERSION=$(NODE_VERSION) \
 	LITEPARSE_VERSION=$(VERSION) \
+	PATCH_SUFFIX=$(PATCH_SUFFIX) \
 	TESSERACT_LANGS="$(LANGS)" \
 	docker buildx bake --push
 
@@ -185,5 +187,5 @@ help:
 	@grep -E '^## ' Makefile | sed 's/^## /  /'
 	@echo ""
 	@echo "Variables:"
-	@echo "  NODE_VERSION=$(NODE_VERSION)  VERSION=$(VERSION)  LANGS=$(LANGS)"
+	@echo "  NODE_VERSION=$(NODE_VERSION)  VERSION=$(VERSION)  PATCH_SUFFIX=$(PATCH_SUFFIX)  LANGS=$(LANGS)"
 	@echo "  REGISTRY=$(REGISTRY)  DOCUMENTS_DIR=$(DOCUMENTS_DIR)"

@@ -18,6 +18,13 @@ on:
     branches: [main]
     paths:
       - .liteparse-version
+      - .patch-level
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (e.g. v1.5.0-2). Leave empty to compute from files."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -30,20 +37,34 @@ jobs:
         with:
           fetch-depth: 0 # full history for changelog generation
 
-      - name: Read and validate version
+      - name: Compute tag
+        id: computed
+        uses: ./.github/actions/compute-tag
+
+      - name: Resolve final tag
         id: version
         run: |
-          VERSION=$(cat .liteparse-version | tr -d '[:space:]')
+          # Priority: workflow_dispatch input > computed tag
+          INPUT_TAG="${{ inputs.tag }}"
+          COMPUTED_TAG="${{ steps.computed.outputs.tag }}"
+          VERSION="${{ steps.computed.outputs.version }}"
+
+          if [ -n "${INPUT_TAG}" ]; then
+            TAG="${INPUT_TAG}"
+          else
+            TAG="${COMPUTED_TAG}"
+          fi
+
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "is_patch=${{ steps.computed.outputs.is_patch }}" >> "$GITHUB_OUTPUT"
 
           # Only create releases for semver versions, not "latest"
           if echo "${VERSION}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+'; then
             echo "is_semver=true" >> "$GITHUB_OUTPUT"
-            echo "tag=v${VERSION}" >> "$GITHUB_OUTPUT"
-            echo "Semver detected: ${VERSION} → tag v${VERSION}"
+            echo "Semver detected: ${VERSION} → tag ${TAG}"
           else
             echo "is_semver=false" >> "$GITHUB_OUTPUT"
-            echo "tag=" >> "$GITHUB_OUTPUT"
             echo "Non-semver version '${VERSION}' — skipping release."
           fi
 
@@ -65,9 +86,17 @@ jobs:
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           TAG="${{ steps.version.outputs.tag }}"
+          IS_PATCH="${{ steps.version.outputs.is_patch }}"
 
           # Find the previous tag for changelog range
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+
+          # Patch-specific release note
+          if [ "${IS_PATCH}" = "true" ]; then
+            PATCH_NOTE=$'\n\n'"### Security patches from dependabot"$'\n'"This release includes dependency security patches from dependabot."
+          else
+            PATCH_NOTE=""
+          fi
 
           NOTES="## Docker images
 
@@ -84,7 +113,7 @@ jobs:
           ## Upstream
 
           This release tracks [\`@llamaindex/liteparse@${VERSION}\`](https://www.npmjs.com/package/@llamaindex/liteparse/v/${VERSION}).
-          See the [LiteParse changelog](https://github.com/run-llama/liteparse/releases) for details."
+          See the [LiteParse changelog](https://github.com/run-llama/liteparse/releases) for details.${PATCH_NOTE}"
 
           gh release create "${TAG}" \
             --title "${TAG}" \

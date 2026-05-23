@@ -177,8 +177,9 @@ jobs:
           # Create branch and update version file
           git checkout -b "${BRANCH}"
           echo "${NEW_VERSION}" > .liteparse-version
-          git add .liteparse-version
-          COMMIT_MSG="deps: bump liteparse to ${NEW_VERSION}"$'\n\n'"Detected by upstream-watch workflow."$'\n'"Previous version: ${{ needs.check-upstream.outputs.current_version }}"
+          echo "0" > .patch-level
+          git add .liteparse-version .patch-level
+          COMMIT_MSG="deps: bump liteparse to ${NEW_VERSION}"$'\n\n'"Detected by upstream-watch workflow."$'\n'"Previous version: ${{ needs.check-upstream.outputs.current_version }}"$'\n'"Patch level reset to 0."
           git commit -m "${COMMIT_MSG}"
 
           git push origin "${BRANCH}"
