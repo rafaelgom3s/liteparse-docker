@@ -6,6 +6,6 @@
   },
   "dependencies": {
     "pdf-lib": "^1.17.1",
-    "docx": "^9.4.1"
+    "docx": "^9.7.1"
   }
 }
